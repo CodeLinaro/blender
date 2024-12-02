@@ -203,7 +203,7 @@ void VKShaderInterface::init(const shader::ShaderCreateInfo &info)
 
   uint32_t descriptor_set_location = 0;
   for (const ShaderCreateInfo::SubpassIn &subpass_in : info.subpass_inputs_) {
-    const ShaderInput* input = input_attachment_get(subpass_in.index);
+    const ShaderInput* input = texture_get(subpass_in.index);
     BLI_assert(input);
     BLI_assert(STREQ(input_name_get(input), SUBPASS_FALLBACK_NAME));
     descriptor_set_location_update(input,
