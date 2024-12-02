@@ -29,8 +29,6 @@ static VKBindType to_bind_type(shader::ShaderCreateInfo::Resource::BindType bind
       return VKBindType::SAMPLER;
     case shader::ShaderCreateInfo::Resource::BindType::IMAGE:
       return VKBindType::IMAGE;
-    case shader::ShaderCreateInfo::Resource::BindType::INPUT_ATTACHMENT:
-      return VKBindType::INPUT_ATTACHMENT;
   }
   BLI_assert_unreachable();
   return VKBindType::UNIFORM_BUFFER;
@@ -67,8 +65,6 @@ void VKShaderInterface::init(const shader::ShaderCreateInfo &info)
         break;
       case ShaderCreateInfo::Resource::BindType::STORAGE_BUFFER:
         ssbo_len_++;
-        break;
-      case ShaderCreateInfo::Resource::BindType::INPUT_ATTACHMENT:
         break;
     }
   }
@@ -207,8 +203,7 @@ void VKShaderInterface::init(const shader::ShaderCreateInfo &info)
 
   uint32_t descriptor_set_location = 0;
   for (const ShaderCreateInfo::SubpassIn &subpass_in : info.subpass_inputs_) {
-    const ShaderInput *input = shader_input_get(
-        shader::ShaderCreateInfo::Resource::BindType::INPUT_ATTACHMENT, subpass_in.index);
+    const ShaderInput* input = input_attachment_get(subpass_in.index);
     BLI_assert(input);
     BLI_assert(STREQ(input_name_get(input), SUBPASS_FALLBACK_NAME));
     descriptor_set_location_update(input,
@@ -330,9 +325,6 @@ void VKShaderInterface::descriptor_set_location_update(
       case shader::ShaderCreateInfo::Resource::BindType::SAMPLER:
         vk_access_flags |= VK_ACCESS_SHADER_READ_BIT;
         break;
-      case shader::ShaderCreateInfo::Resource::BindType::INPUT_ATTACHMENT:
-        vk_access_flags |= VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
-        break;
     };
   }
   else if (bind_type == VKBindType::UNIFORM_BUFFER) {
@@ -401,8 +393,6 @@ const ShaderInput *VKShaderInterface::shader_input_get(
       return ssbo_get(binding);
     case shader::ShaderCreateInfo::Resource::BindType::UNIFORM_BUFFER:
       return ubo_get(binding);
-    case shader::ShaderCreateInfo::Resource::BindType::INPUT_ATTACHMENT:
-      return input_attachment_get(binding);
   }
   return nullptr;
 }

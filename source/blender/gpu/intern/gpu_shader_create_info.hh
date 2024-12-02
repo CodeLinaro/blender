@@ -763,7 +763,6 @@ struct ShaderCreateInfo {
       STORAGE_BUFFER,
       SAMPLER,
       IMAGE,
-      INPUT_ATTACHMENT,
     };
 
     BindType bind_type;
@@ -801,8 +800,6 @@ struct ShaderCreateInfo {
           TEST_EQUAL(*this, b, image.type);
           TEST_EQUAL(*this, b, image.qualifiers);
           TEST_EQUAL(*this, b, image.name);
-          break;
-        case INPUT_ATTACHMENT:
           break;
       }
       return true;
@@ -1365,9 +1362,6 @@ struct ShaderCreateInfo {
           break;
         case Resource::BindType::IMAGE:
           stream << "IMAGE(" << res.slot << ", " << res.image.name << ")" << std::endl;
-          break;
-        case Resource::BindType::INPUT_ATTACHMENT:
-          stream << "INPUT_ATTACHMENT(" << res.slot << ", " << res.image.name << ")" << std::endl;
           break;
       }
     };

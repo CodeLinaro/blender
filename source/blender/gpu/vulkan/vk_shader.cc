@@ -383,10 +383,6 @@ static void print_resource(std::ostream &os,
       print_image_type(os, res.image.type, res.bind_type);
       os << res.image.name << ";\n";
       break;
-    case ShaderCreateInfo::Resource::BindType::INPUT_ATTACHMENT:
-      os << "input_attachment ";
-      // TODO
-      break;
     case ShaderCreateInfo::Resource::BindType::UNIFORM_BUFFER:
       array_offset = res.uniformbuf.name.find_first_of("[");
       name_no_array = (array_offset == -1) ? res.uniformbuf.name :

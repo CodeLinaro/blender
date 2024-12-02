@@ -230,8 +230,6 @@ void ShaderCreateInfo::finalize(const bool recursive)
         case Resource::BindType::IMAGE:
           res.slot = images++;
           break;
-        case Resource::BindType::INPUT_ATTACHMENT:
-          break;
       }
     };
 
@@ -341,8 +339,6 @@ void ShaderCreateInfo::validate_merge(const ShaderCreateInfo &other_info)
           return ubos.add(res.slot);
         case Resource::BindType::IMAGE:
           return ssbos.add(res.slot);
-        case Resource::BindType::INPUT_ATTACHMENT:
-          return true;
         default:
           return false;
       }
@@ -362,8 +358,6 @@ void ShaderCreateInfo::validate_merge(const ShaderCreateInfo &other_info)
             break;
           case Resource::BindType::IMAGE:
             std::cout << "Image " << res.image.name;
-            break;
-          case Resource::BindType::INPUT_ATTACHMENT:
             break;
           default:
             std::cout << "Unknown Type";
