@@ -333,17 +333,49 @@ static void set_load_store(VkRenderingAttachmentInfo &r_rendering_attachment,
 /** \name Sub-pass transition
  * \{ */
 
-void VKFrameBuffer::subpass_transition_impl(const GPUAttachmentState,
+void VKFrameBuffer::subpass_transition_impl(const GPUAttachmentState depth_attachment_state,
                                             Span<GPUAttachmentState> color_attachment_states)
 {
-  VKContext& context = *VKContext::get();
+  const VKDevice& device = VKBackend::get().device;
+  const bool supports_local_read = !device.workarounds_get().dynamic_rendering_local_read;
+  if (supports_local_read)
+  {
+      VKContext& context = *VKContext::get();
 
-  for (int index : IndexRange(color_attachment_states.size())) {
-    if (color_attachment_states[index] == GPU_ATTACHMENT_READ) {
-      VKTexture* texture = unwrap(unwrap(color_tex(index)));
-      if (texture) {
-        context.state_manager_get().image_bind(
-          texture, index);
+      for (int index : IndexRange(color_attachment_states.size())) {
+        if (color_attachment_states[index] == GPU_ATTACHMENT_READ) {
+          VKTexture* texture = unwrap(unwrap(color_tex(index)));
+          if (texture) {
+            context.state_manager_get().image_bind(
+              texture, index);
+          }
+        }
+      }
+  }
+  else
+  {
+    VKContext &context = *VKContext::get();
+    if (is_rendering_) {
+      rendering_end(context);
+
+      /* TODO: this might need a better implementation:
+       * READ -> DONTCARE
+       * WRITE -> LOAD, STORE based on previous value.
+       * IGNORE -> DONTCARE -> IGNORE */
+      load_stores.fill(default_load_store());
+    }
+
+    attachment_states_[GPU_FB_DEPTH_ATTACHMENT] = depth_attachment_state;
+    attachment_states_.as_mutable_span()
+        .slice(GPU_FB_COLOR_ATTACHMENT0, color_attachment_states.size())
+        .copy_from(color_attachment_states);
+    for (int index : IndexRange(color_attachment_states.size())) {
+      if (color_attachment_states[index] == GPU_ATTACHMENT_READ) {
+        VKTexture *texture = unwrap(unwrap(color_tex(index)));
+        if (texture) {
+          context.state_manager_get().texture_bind(
+              texture, GPUSamplerState::default_sampler(), index);
+        }
       }
     }
   }
@@ -787,6 +819,9 @@ void VKFrameBuffer::rendering_ensure_render_pass(VKContext &context)
 void VKFrameBuffer::rendering_ensure_dynamic_rendering(VKContext &context,
                                                        const VKWorkarounds &workarounds)
 {
+  const VKDevice& device = VKBackend::get().device;
+  const bool supports_local_read = !device.workarounds_get().dynamic_rendering_local_read;
+
   depth_attachment_format_ = VK_FORMAT_UNDEFINED;
   stencil_attachment_format_ = VK_FORMAT_UNDEFINED;
 
@@ -836,7 +871,9 @@ void VKFrameBuffer::rendering_ensure_dynamic_rendering(VKContext &context,
       vk_image_view = color_texture.image_view_get(image_view_info).vk_handle();
     }
     attachment_info.imageView = vk_image_view;
-    attachment_info.imageLayout = VK_IMAGE_LAYOUT_RENDERING_LOCAL_READ_KHR;
+    attachment_info.imageLayout = supports_local_read ?
+      VK_IMAGE_LAYOUT_RENDERING_LOCAL_READ_KHR :
+      VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     set_load_store(attachment_info, load_stores[color_attachment_index]);
 
     access_info.images.append(

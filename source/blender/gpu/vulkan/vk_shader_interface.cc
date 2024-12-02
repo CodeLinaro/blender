@@ -68,12 +68,12 @@ void VKShaderInterface::init(const shader::ShaderCreateInfo &info)
         break;
     }
   }
-
+  const VKDevice& device = VKBackend::get().device;
+  const bool supports_local_read = !device.workarounds_get().dynamic_rendering_local_read;
   uniform_len_ += info.subpass_inputs_.size();
 
   /* Reserve 1 uniform buffer for push constants fallback. */
   size_t names_size = info.interface_names_size_;
-  const VKDevice &device = VKBackend::get().device;
   const VKPushConstants::StorageType push_constants_storage_type =
       VKPushConstants::Layout::determine_storage_type(info, device);
   if (push_constants_storage_type == VKPushConstants::StorageType::UNIFORM_BUFFER) {
@@ -203,7 +203,9 @@ void VKShaderInterface::init(const shader::ShaderCreateInfo &info)
 
   uint32_t descriptor_set_location = 0;
   for (const ShaderCreateInfo::SubpassIn &subpass_in : info.subpass_inputs_) {
-    const ShaderInput* input = texture_get(subpass_in.index);
+    const ShaderInput* input = supports_local_read ?
+      texture_get(subpass_in.index) :
+      shader_input_get(shader::ShaderCreateInfo::Resource::BindType::SAMPLER, subpass_in.index);
     BLI_assert(input);
     BLI_assert(STREQ(input_name_get(input), SUBPASS_FALLBACK_NAME));
     descriptor_set_location_update(input,
@@ -294,6 +296,9 @@ void VKShaderInterface::descriptor_set_location_update(
   BLI_assert_msg(!resource.has_value() || to_bind_type(resource->bind_type) == bind_type,
                  "Incorrect parameter, bind types do not match.");
 
+  const VKDevice& device = VKBackend::get().device;
+  const bool supports_local_read = !device.workarounds_get().dynamic_rendering_local_read;
+
   int32_t index = shader_input_index(inputs_, shader_input);
   BLI_assert(resource_bindings_[index].binding == -1);
 
@@ -331,7 +336,9 @@ void VKShaderInterface::descriptor_set_location_update(
     vk_access_flags |= VK_ACCESS_UNIFORM_READ_BIT;
   }
   else if (bind_type == VKBindType::INPUT_ATTACHMENT) {
-    vk_access_flags |= VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
+    vk_access_flags |= supports_local_read ?
+      VK_ACCESS_INPUT_ATTACHMENT_READ_BIT :
+      VK_ACCESS_SHADER_READ_BIT;
   }
 
   VKResourceBinding &resource_binding = resource_bindings_[index];
@@ -405,12 +412,14 @@ void VKShaderInterface::init_descriptor_set_layout_info(
 {
   BLI_assert(descriptor_set_layout_info_.bindings.is_empty());
   const VKWorkarounds &workarounds = VKBackend::get().device.workarounds_get();
+  const bool supports_local_read = !workarounds.dynamic_rendering_local_read;
+
   descriptor_set_layout_info_.bindings.reserve(resources_len);
   if (!(info.compute_source_.is_empty() && info.compute_source_generated.empty()))
   {
     descriptor_set_layout_info_.vk_shader_stage_flags = VK_SHADER_STAGE_COMPUTE_BIT;
   }
-  else if (!info.subpass_inputs_.is_empty())
+  else if (supports_local_read && !info.subpass_inputs_.is_empty())
   {
     descriptor_set_layout_info_.vk_shader_stage_flags = VK_SHADER_STAGE_FRAGMENT_BIT;
   }
@@ -420,7 +429,10 @@ void VKShaderInterface::init_descriptor_set_layout_info(
   }
   for (int index : IndexRange(info.subpass_inputs_.size())) {
     UNUSED_VARS(index);
-    descriptor_set_layout_info_.bindings.append(VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT);
+    descriptor_set_layout_info_.bindings.append_n_times(
+      workarounds.dynamic_rendering ? VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT :
+                                      VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+      info.subpass_inputs_.size());
   }
   for (const shader::ShaderCreateInfo::Resource &res : all_resources) {
     descriptor_set_layout_info_.bindings.append(to_vk_descriptor_type(res));

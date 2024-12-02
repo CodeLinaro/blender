@@ -13,6 +13,7 @@
 
 #include "vk_command_builder.hh"
 #include "vk_render_graph.hh"
+#include "vk_backend.hh"
 
 namespace blender::gpu::render_graph {
 
@@ -107,6 +108,8 @@ void VKCommandBuilder::build_node_group(VKRenderGraph &render_graph,
                                         std::optional<NodeHandle> &r_rendering_scope)
 {
   bool is_rendering = false;
+  const VKDevice& device = VKBackend::get().device;
+  const bool supports_local_read = !device.workarounds_get().dynamic_rendering_local_read;
 
   for (NodeHandle node_handle : node_group) {
     VKRenderGraphNode &node = render_graph.nodes_[node_handle];
@@ -154,7 +157,7 @@ void VKCommandBuilder::build_node_group(VKRenderGraph &render_graph,
         rendering_node.build_commands(command_buffer, state_.active_pipelines);
         is_rendering = true;
       }
-      else if (node_has_input_attachments(render_graph, node_handle))
+      else if (supports_local_read && node_has_input_attachments(render_graph, node_handle))
       {
         build_pipeline_barriers(render_graph, command_buffer, node_handle, node.pipeline_stage_get(), true);
       }
@@ -662,6 +665,9 @@ void VKCommandBuilder::layer_tracking_update(VkImage vk_image,
 
 void VKCommandBuilder::layer_tracking_end(VKCommandBufferInterface &command_buffer, bool suspend)
 {
+  const VKDevice& device = VKBackend::get().device;
+  const bool supports_local_read = !device.workarounds_get().dynamic_rendering_local_read;
+
   if (!state_.layered_bindings.is_empty()) {
     reset_barriers();
     /* We should be able to do better. BOTTOM/TOP is really a worst case barrier. */
@@ -677,8 +683,9 @@ void VKCommandBuilder::layer_tracking_end(VKCommandBufferInterface &command_buff
               VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
               VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT,
           binding.vk_image_layout,
-          // support usage as both a color attachment and input attachment
-          VK_IMAGE_LAYOUT_RENDERING_LOCAL_READ_KHR,
+          supports_local_read ? 
+            VK_IMAGE_LAYOUT_RENDERING_LOCAL_READ_KHR : // support usage as both a color attachment and input attachment
+            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
           VK_IMAGE_ASPECT_COLOR_BIT,
           binding.layer,
           binding.layer_count);

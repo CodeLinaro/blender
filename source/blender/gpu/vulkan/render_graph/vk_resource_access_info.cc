@@ -14,20 +14,29 @@
 #include "vk_resource_access_info.hh"
 #include "vk_render_graph_links.hh"
 #include "vk_resource_state_tracker.hh"
+#include "vk_backend.hh"
 
 namespace blender::gpu::render_graph {
 
 VkImageLayout VKImageAccess::to_vk_image_layout() const
 {
+  const VKDevice& device = VKBackend::get().device;
+  const bool supports_local_read = !device.workarounds_get().dynamic_rendering_local_read;
+
   if (vk_access_flags & (VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT)) {
     /* TODO: when read only use VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL */
     return VK_IMAGE_LAYOUT_GENERAL;
   }
 
-  if (vk_access_flags &
+  if (supports_local_read && vk_access_flags &
     (VK_ACCESS_INPUT_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT))
   {
     return VK_IMAGE_LAYOUT_RENDERING_LOCAL_READ_KHR;
+  }
+  else if (vk_access_flags &
+      (VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT))
+  {
+    return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
   }
 
   // TODO: Add ATTACHMENT_READ_ONLY_OPTIMAL
